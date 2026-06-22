@@ -1,19 +1,150 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:background="#F4F6FA">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+    <!-- 로그인 화면 -->
+    <LinearLayout
+        android:id="@+id/loginLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="28dp">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="PCA-APP"
+            android:textSize="30sp"
+            android:textStyle="bold"
+            android:textColor="#202124"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvBtStatusLogin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="블루투스 연결 대기 중"
+            android:textSize="14sp"
+            android:textColor="#5F6368"
+            android:layout_marginBottom="32dp" />
+
+        <EditText
+            android:id="@+id/etUserId"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:hint="아이디"
+            android:singleLine="true"
+            android:paddingHorizontal="16dp"
+            android:background="@android:drawable/edit_text"
+            android:layout_marginBottom="12dp" />
+
+        <EditText
+            android:id="@+id/etPassword"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:hint="비밀번호"
+            android:singleLine="true"
+            android:inputType="textPassword"
+            android:paddingHorizontal="16dp"
+            android:background="@android:drawable/edit_text"
+            android:layout_marginBottom="24dp" />
+
+        <Button
+            android:id="@+id/btnLogin"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="로그인" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="더미 계정: admin / 1234"
+            android:textSize="13sp"
+            android:textColor="#80868B"
+            android:layout_marginTop="16dp" />
+
+    </LinearLayout>
+
+    <!-- 메인 제어 화면 -->
+    <LinearLayout
+        android:id="@+id/controlLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="PCA-APP"
+            android:textSize="30sp"
+            android:textStyle="bold"
+            android:textColor="#202124"
+            android:layout_marginTop="28dp" />
+
+        <TextView
+            android:id="@+id/tvBtStatusMain"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="블루투스 상태: 연결 대기 중"
+            android:textSize="15sp"
+            android:textColor="#5F6368"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="28dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="출차 방향을 선택하세요"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#202124"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/btnLeftExit"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="왼쪽 출차"
+            android:textSize="18sp"
+            android:layout_marginBottom="14dp" />
+
+        <Button
+            android:id="@+id/btnRightExit"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="오른쪽 출차"
+            android:textSize="18sp"
+            android:layout_marginBottom="14dp" />
+
+        <Button
+            android:id="@+id/btnStraightExit"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="직진 출차"
+            android:textSize="18sp"
+            android:layout_marginBottom="14dp" />
+
+        <Button
+            android:id="@+id/btnCancelExit"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="출차 취소"
+            android:textSize="18sp"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:id="@+id/tvLastPacket"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="최근 패킷: 없음"
+            android:textSize="14sp"
+            android:textColor="#5F6368" />
+
+    </LinearLayout>
+
+</FrameLayout>
