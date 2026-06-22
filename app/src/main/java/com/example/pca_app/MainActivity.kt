@@ -6,9 +6,11 @@ import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -28,15 +30,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_BT_PERMISSION = 1001
 
-        /*
-         * 라즈베리파이 Bluetooth 이름 또는 MAC 주소를 설정하세요.
-         *
-         * Android 설정 > Bluetooth에서 보이는 라즈베리파이 이름이
-         * raspberrypi가 아니면 TARGET_DEVICE_NAME을 수정하세요.
-         *
-         * MAC 주소를 알면 TARGET_DEVICE_MAC에 넣는 것이 더 안정적입니다.
-         * 예: private const val TARGET_DEVICE_MAC = "B8:27:EB:AA:BB:CC"
-         */
+        // 라즈베리파이 Bluetooth MAC 주소
         private const val TARGET_DEVICE_NAME = ""
         private const val TARGET_DEVICE_MAC = "88:A2:9E:47:F3:BB"
 
@@ -55,6 +49,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var etUserId: EditText
     private lateinit var etPassword: EditText
 
+    private lateinit var btnLeftExit: Button
+    private lateinit var btnRightExit: Button
+    private lateinit var btnStraightExit: Button
+    private lateinit var btnCancelExit: Button
+
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var bluetoothSocket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
@@ -64,6 +63,12 @@ class MainActivity : ComponentActivity() {
 
     @Volatile
     private var keepReading = false
+
+    @Volatile
+    private var isReconnecting = false
+
+    @Volatile
+    private var shouldAutoReconnect = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +98,13 @@ class MainActivity : ComponentActivity() {
 
         etUserId = findViewById(R.id.etUserId)
         etPassword = findViewById(R.id.etPassword)
+
+        btnLeftExit = findViewById(R.id.btnLeftExit)
+        btnRightExit = findViewById(R.id.btnRightExit)
+        btnStraightExit = findViewById(R.id.btnStraightExit)
+        btnCancelExit = findViewById(R.id.btnCancelExit)
+
+        setControlButtonsEnabled(false)
     }
 
     private fun setupLogin() {
@@ -103,6 +115,8 @@ class MainActivity : ComponentActivity() {
             val pw = etPassword.text.toString().trim()
 
             if (id == "admin" && pw == "1234") {
+                hideKeyboard()
+
                 loginLayout.visibility = LinearLayout.GONE
                 controlLayout.visibility = LinearLayout.VISIBLE
 
@@ -114,20 +128,37 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setupButtons() {
-        findViewById<Button>(R.id.btnLeftExit).setOnClickListener {
+        btnLeftExit.setOnClickListener {
             sendPacket("LEFT_EXIT\n")
         }
 
-        findViewById<Button>(R.id.btnRightExit).setOnClickListener {
+        btnRightExit.setOnClickListener {
             sendPacket("RIGHT_EXIT\n")
         }
 
-        findViewById<Button>(R.id.btnStraightExit).setOnClickListener {
+        btnStraightExit.setOnClickListener {
             sendPacket("STRAIGHT_EXIT\n")
         }
 
-        findViewById<Button>(R.id.btnCancelExit).setOnClickListener {
+        btnCancelExit.setOnClickListener {
             sendPacket("CANCEL_EXIT\n")
+        }
+    }
+
+    private fun setControlButtonsEnabled(enabled: Boolean) {
+        btnLeftExit.isEnabled = enabled
+        btnRightExit.isEnabled = enabled
+        btnStraightExit.isEnabled = enabled
+        btnCancelExit.isEnabled = enabled
+    }
+
+    private fun hideKeyboard() {
+        val view = currentFocus
+
+        if (view != null) {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(view.windowToken, 0)
+            view.clearFocus()
         }
     }
 
@@ -178,6 +209,7 @@ class MainActivity : ComponentActivity() {
                 startBluetoothConnection()
             } else {
                 updateBtStatus("블루투스 권한이 거부되었습니다.")
+                setControlButtonsEnabled(false)
             }
         }
     }
@@ -185,73 +217,126 @@ class MainActivity : ComponentActivity() {
     private fun startBluetoothConnection() {
         if (bluetoothAdapter == null) {
             updateBtStatus("이 기기는 블루투스를 지원하지 않습니다.")
+            setControlButtonsEnabled(false)
             return
         }
 
         if (bluetoothAdapter?.isEnabled != true) {
             updateBtStatus("블루투스가 꺼져 있습니다. 설정에서 켜주세요.")
+            setControlButtonsEnabled(false)
             return
         }
 
         updateBtStatus("라즈베리파이에 연결 시도 중...")
+        setControlButtonsEnabled(false)
+
+        // 앱 시작 시에도 재연결 루프를 사용
+        scheduleReconnect("app start")
+    }
+
+    private fun scheduleReconnect(reason: String) {
+        if (!shouldAutoReconnect) return
+        if (isReconnecting) return
+
+        isConnected = false
+        keepReading = false
+        isReconnecting = true
+
+        runOnUiThread {
+            updateBtStatus("연결 끊김: $reason / 재연결 대기 중")
+            setControlButtonsEnabled(false)
+        }
 
         thread {
-            connectToRaspberryPi()
+            closeBluetoothSocket()
+
+            while (shouldAutoReconnect && !isConnected) {
+                try {
+                    Thread.sleep(3000)
+                } catch (_: InterruptedException) {
+                }
+
+                if (!shouldAutoReconnect) break
+
+                runOnUiThread {
+                    updateBtStatus("라즈베리파이에 재연결 시도 중...")
+                    setControlButtonsEnabled(false)
+                }
+
+                val success = connectToRaspberryPiOnce()
+
+                if (!success && shouldAutoReconnect) {
+                    runOnUiThread {
+                        updateBtStatus("재연결 실패 / 3초 후 다시 시도")
+                        setControlButtonsEnabled(false)
+                    }
+                }
+            }
+
+            isReconnecting = false
         }
     }
 
     @SuppressLint("MissingPermission")
-    private fun connectToRaspberryPi() {
-        try {
-            val adapter = bluetoothAdapter ?: return
+    private fun connectToRaspberryPiOnce(): Boolean {
+        return try {
+            val adapter = bluetoothAdapter ?: return false
             val targetDevice = findTargetDevice(adapter)
 
             if (targetDevice == null) {
                 runOnUiThread {
                     updateBtStatus("페어링된 라즈베리파이를 찾지 못했습니다.")
-                    Toast.makeText(
-                        this,
-                        "먼저 Android Bluetooth 설정에서 Raspberry Pi와 페어링하세요.",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    setControlButtonsEnabled(false)
                 }
-                return
+                return false
             }
 
             adapter.cancelDiscovery()
 
-            val socket = targetDevice.createRfcommSocketToServiceRecord(SPP_UUID)
-            socket.connect()
+            closeBluetoothSocket()
+
+            val socket = try {
+                val s = targetDevice.createRfcommSocketToServiceRecord(SPP_UUID)
+                s.connect()
+                s
+            } catch (e: IOException) {
+                val fallback = targetDevice.javaClass
+                    .getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                    .invoke(targetDevice, 1) as BluetoothSocket
+
+                fallback.connect()
+                fallback
+            }
 
             bluetoothSocket = socket
             outputStream = socket.outputStream
+
             isConnected = true
             keepReading = true
 
             runOnUiThread {
                 val deviceName = targetDevice.name ?: targetDevice.address
                 updateBtStatus("연결됨: $deviceName")
+                setControlButtonsEnabled(true)
                 Toast.makeText(this, "라즈베리파이 연결 성공", Toast.LENGTH_SHORT).show()
             }
 
             startReadLoop(socket)
 
-        } catch (e: IOException) {
+            true
+
+        } catch (e: Exception) {
             isConnected = false
             keepReading = false
 
-            try {
-                bluetoothSocket?.close()
-            } catch (_: IOException) {
-            }
+            closeBluetoothSocket()
 
             runOnUiThread {
                 updateBtStatus("연결 실패: ${e.message}")
+                setControlButtonsEnabled(false)
             }
-        } catch (e: SecurityException) {
-            runOnUiThread {
-                updateBtStatus("블루투스 권한 오류: ${e.message}")
-            }
+
+            false
         }
     }
 
@@ -267,14 +352,25 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        return bondedDevices.firstOrNull {
-            it.name?.equals(TARGET_DEVICE_NAME, ignoreCase = true) == true
+        val possibleNames = listOf(
+            TARGET_DEVICE_NAME,
+            "PCA-RPI",
+            "admin",
+            "raspberrypi"
+        )
+
+        return bondedDevices.firstOrNull { device ->
+            possibleNames.any { name ->
+                name.isNotBlank() && device.name?.equals(name, ignoreCase = true) == true
+            }
         }
     }
 
     private fun sendPacket(packet: String) {
         if (!isConnected || outputStream == null) {
             Toast.makeText(this, "블루투스가 연결되지 않았습니다.", Toast.LENGTH_SHORT).show()
+            setControlButtonsEnabled(false)
+            scheduleReconnect("not connected")
             return
         }
 
@@ -288,12 +384,12 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "전송됨: ${packet.trim()}", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: IOException) {
-                isConnected = false
-
                 runOnUiThread {
-                    updateBtStatus("전송 실패: ${e.message}")
                     Toast.makeText(this, "패킷 전송 실패", Toast.LENGTH_SHORT).show()
+                    setControlButtonsEnabled(false)
                 }
+
+                scheduleReconnect(e.message ?: "send failed")
             }
         }
     }
@@ -306,19 +402,23 @@ class MainActivity : ComponentActivity() {
                 )
 
                 while (keepReading) {
-                    val line = reader.readLine() ?: break
+                    val line = reader.readLine()
+
+                    if (line == null) {
+                        scheduleReconnect("socket closed")
+                        break
+                    }
+
                     handleReceivedPacket(line.trim())
                 }
 
             } catch (e: IOException) {
                 if (keepReading) {
-                    runOnUiThread {
-                        updateBtStatus("수신 연결 끊김: ${e.message}")
-                    }
+                    scheduleReconnect(e.message ?: "socket error")
                 }
             } finally {
-                isConnected = false
                 keepReading = false
+                isConnected = false
             }
         }
     }
@@ -347,6 +447,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun closeBluetoothSocket() {
+        try {
+            outputStream?.close()
+        } catch (_: IOException) {
+        }
+
+        try {
+            bluetoothSocket?.close()
+        } catch (_: IOException) {
+        }
+
+        outputStream = null
+        bluetoothSocket = null
+    }
+
     private fun showAlert(title: String, message: String) {
         AlertDialog.Builder(this)
             .setTitle(title)
@@ -363,13 +478,11 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
 
+        shouldAutoReconnect = false
         keepReading = false
         isConnected = false
+        isReconnecting = false
 
-        try {
-            outputStream?.close()
-            bluetoothSocket?.close()
-        } catch (_: IOException) {
-        }
+        closeBluetoothSocket()
     }
 }
