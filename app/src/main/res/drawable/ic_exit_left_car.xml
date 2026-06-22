@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="140dp"
+    android:height="82dp"
+    android:viewportWidth="140"
+    android:viewportHeight="82">
+
+    <!-- 주차 라인 -->
+    <path android:pathData="M82,10 L82,72 M128,10 L128,72 M82,10 L128,10 M82,72 L128,72"
+        android:strokeColor="#31435C" android:strokeWidth="3" android:fillColor="@android:color/transparent" android:strokeLineCap="round" />
+
+    <!-- 좌측 출차 방향 -->
+    <path android:pathData="M76,41 L30,41" android:strokeColor="#57D3FF" android:strokeWidth="7" android:fillColor="@android:color/transparent" android:strokeLineCap="round" />
+    <path android:pathData="M32,41 L48,25 L48,57 Z" android:fillColor="#57D3FF" />
+
+    <!-- 차량 그림 -->
+    <path android:pathData="M91,22 L119,22 Q125,22 127,29 L130,42 L127,58 Q126,64 119,64 L91,64 Q85,64 83,58 L80,42 L83,29 Q85,22 91,22 Z"
+        android:fillColor="#EAF3FF" />
+    <path android:pathData="M94,27 L116,27 Q120,27 121,31 L123,39 L87,39 L89,31 Q90,27 94,27 Z"
+        android:fillColor="#4A6A91" />
+    <path android:pathData="M88,46 L123,46 L122,56 Q121,59 117,59 L94,59 Q90,59 89,56 Z"
+        android:fillColor="#C9DFFF" />
+    <path android:pathData="M86,58 A5,5 0,1 0,96 58 A5,5 0,1 0,86 58" android:fillColor="#151B25" />
+    <path android:pathData="M114,58 A5,5 0,1 0,124 58 A5,5 0,1 0,114 58" android:fillColor="#151B25" />
+    <path android:pathData="M82,42 L130,42" android:strokeColor="#9EBEFF" android:strokeWidth="2" android:fillColor="@android:color/transparent" />
+</vector>

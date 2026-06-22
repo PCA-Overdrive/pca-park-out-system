@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
@@ -49,9 +50,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var etUserId: EditText
     private lateinit var etPassword: EditText
 
-    private lateinit var btnLeftExit: Button
-    private lateinit var btnRightExit: Button
-    private lateinit var btnStraightExit: Button
+    private lateinit var btnLeftExit: View
+    private lateinit var btnRightExit: View
+    private lateinit var btnStraightExit: View
     private lateinit var btnCancelExit: Button
 
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -146,10 +147,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setControlButtonsEnabled(enabled: Boolean) {
-        btnLeftExit.isEnabled = enabled
-        btnRightExit.isEnabled = enabled
-        btnStraightExit.isEnabled = enabled
-        btnCancelExit.isEnabled = enabled
+        applyButtonEnabledState(btnLeftExit, enabled)
+        applyButtonEnabledState(btnRightExit, enabled)
+        applyButtonEnabledState(btnStraightExit, enabled)
+        applyButtonEnabledState(btnCancelExit, enabled)
+    }
+
+    private fun applyButtonEnabledState(view: View, enabled: Boolean) {
+        view.isEnabled = enabled
+        view.isClickable = enabled
+        view.isFocusable = enabled
+
+        view.alpha = if (enabled) {
+            1.0f
+        } else {
+            0.35f
+        }
     }
 
     private fun hideKeyboard() {
@@ -380,7 +393,7 @@ class MainActivity : ComponentActivity() {
                 outputStream?.flush()
 
                 runOnUiThread {
-                    tvLastPacket.text = "최근 송신 패킷: ${packet.trim()}"
+                    tvLastPacket.text = "송신 ${packet.trim()}"
                     Toast.makeText(this, "전송됨: ${packet.trim()}", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: IOException) {
@@ -425,7 +438,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleReceivedPacket(packet: String) {
         runOnUiThread {
-            tvLastPacket.text = "최근 수신 패킷: $packet"
+            tvLastPacket.text = "수신 $packet"
 
             when (packet) {
                 "EXIT_DONE" -> {
@@ -472,7 +485,7 @@ class MainActivity : ComponentActivity() {
 
     private fun updateBtStatus(message: String) {
         tvBtStatusLogin.text = message
-        tvBtStatusMain.text = "블루투스 상태: $message"
+        tvBtStatusMain.text = message
     }
 
     override fun onDestroy() {
