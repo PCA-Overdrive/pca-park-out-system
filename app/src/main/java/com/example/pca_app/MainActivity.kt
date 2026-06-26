@@ -71,6 +71,9 @@ class MainActivity : ComponentActivity() {
     @Volatile
     private var shouldAutoReconnect = true
 
+    @Volatile
+    private var isExitCommandInProgress = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -105,7 +108,7 @@ class MainActivity : ComponentActivity() {
         btnStraightExit = findViewById(R.id.btnStraightExit)
         btnCancelExit = findViewById(R.id.btnCancelExit)
 
-        setControlButtonsEnabled(false)
+        updateExitButtonsState()
     }
 
     private fun setupLogin() {
@@ -130,27 +133,52 @@ class MainActivity : ComponentActivity() {
 
     private fun setupButtons() {
         btnLeftExit.setOnClickListener {
-            sendPacket("LEFT_EXIT\n")
+            startExitCommand("LEFT_EXIT\n")
         }
 
         btnRightExit.setOnClickListener {
-            sendPacket("RIGHT_EXIT\n")
+            startExitCommand("RIGHT_EXIT\n")
         }
 
         btnStraightExit.setOnClickListener {
-            sendPacket("STRAIGHT_EXIT\n")
+            startExitCommand("STRAIGHT_EXIT\n")
         }
 
         btnCancelExit.setOnClickListener {
+            applyButtonEnabledState(btnCancelExit, false)
             sendPacket("CANCEL_EXIT\n")
         }
     }
 
+    private fun startExitCommand(packet: String) {
+        if (isExitCommandInProgress) return
+
+        isExitCommandInProgress = true
+        updateExitButtonsState()
+        sendPacket(packet)
+    }
+
+    private fun updateExitButtonsState() {
+        val canSelectExitDirection = isConnected && !isExitCommandInProgress
+        val canCancelExit = isConnected && isExitCommandInProgress
+
+        applyButtonEnabledState(btnLeftExit, canSelectExitDirection)
+        applyButtonEnabledState(btnRightExit, canSelectExitDirection)
+        applyButtonEnabledState(btnStraightExit, canSelectExitDirection)
+        applyButtonEnabledState(btnCancelExit, canCancelExit)
+    }
+
     private fun setControlButtonsEnabled(enabled: Boolean) {
-        applyButtonEnabledState(btnLeftExit, enabled)
-        applyButtonEnabledState(btnRightExit, enabled)
-        applyButtonEnabledState(btnStraightExit, enabled)
-        applyButtonEnabledState(btnCancelExit, enabled)
+        if (enabled) {
+            updateExitButtonsState()
+            return
+        }
+
+        isExitCommandInProgress = false
+        applyButtonEnabledState(btnLeftExit, false)
+        applyButtonEnabledState(btnRightExit, false)
+        applyButtonEnabledState(btnStraightExit, false)
+        applyButtonEnabledState(btnCancelExit, false)
     }
 
     private fun applyButtonEnabledState(view: View, enabled: Boolean) {
@@ -330,7 +358,8 @@ class MainActivity : ComponentActivity() {
             runOnUiThread {
                 val deviceName = targetDevice.name ?: targetDevice.address
                 updateBtStatus("연결됨: $deviceName")
-                setControlButtonsEnabled(true)
+                isExitCommandInProgress = false
+                updateExitButtonsState()
                 Toast.makeText(this, "라즈베리파이 연결 성공", Toast.LENGTH_SHORT).show()
             }
 
@@ -382,6 +411,7 @@ class MainActivity : ComponentActivity() {
     private fun sendPacket(packet: String) {
         if (!isConnected || outputStream == null) {
             Toast.makeText(this, "블루투스가 연결되지 않았습니다.", Toast.LENGTH_SHORT).show()
+            isExitCommandInProgress = false
             setControlButtonsEnabled(false)
             scheduleReconnect("not connected")
             return
@@ -399,6 +429,7 @@ class MainActivity : ComponentActivity() {
             } catch (e: IOException) {
                 runOnUiThread {
                     Toast.makeText(this, "패킷 전송 실패", Toast.LENGTH_SHORT).show()
+                    isExitCommandInProgress = false
                     setControlButtonsEnabled(false)
                 }
 
@@ -442,10 +473,14 @@ class MainActivity : ComponentActivity() {
 
             when (packet) {
                 "EXIT_DONE" -> {
+                    isExitCommandInProgress = false
+                    updateExitButtonsState()
                     showAlert("출차 완료", "차량 출차가 완료되었습니다.")
                 }
 
                 "EXIT_CANCELED" -> {
+                    isExitCommandInProgress = false
+                    updateExitButtonsState()
                     showAlert("출차 취소", "출차가 취소되었습니다.")
                 }
 
@@ -495,6 +530,7 @@ class MainActivity : ComponentActivity() {
         keepReading = false
         isConnected = false
         isReconnecting = false
+        isExitCommandInProgress = false
 
         closeBluetoothSocket()
     }

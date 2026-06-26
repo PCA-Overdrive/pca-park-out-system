@@ -362,6 +362,10 @@
             android:textSize="16sp"
             android:textStyle="bold"
             android:textColor="#FFFFFF"
+            android:enabled="false"
+            android:clickable="false"
+            android:focusable="false"
+            android:alpha="0.35"
             android:background="@drawable/bg_cancel_button" />
 
     </LinearLayout>
