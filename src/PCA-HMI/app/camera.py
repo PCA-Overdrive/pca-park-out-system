@@ -1,0 +1,381 @@
+"""Camera stream and lane-angle detection."""
+
+import math
+import os
+import threading
+import time
+from io import BytesIO
+
+try:
+    import cv2
+    import numpy as np
+except Exception as exc:
+    cv2 = None
+    np = None
+    print(f"OpenCV/Numpy import failed. Camera is disabled: {exc}", flush=True)
+
+try:
+    from parking_line_detector import ParkingLineDetector
+except ImportError:
+    try:
+        from .parking_line_detector import ParkingLineDetector
+    except ImportError:
+        ParkingLineDetector = None
+
+
+class CameraManager:
+    """Manage a Pi/USB camera stream and estimate the current lane angle."""
+
+    def __init__(self, source=0, resolution=(1280, 720), fps=30):
+        self.source = source
+        self.resolution = resolution
+        self.fps = fps
+        self.frame = None
+        self.is_running = False
+        self.lock = threading.Lock()
+        self.jpeg_quality = 80
+
+        self.lane_angle = 0
+        self.lane_angle_updated_at = None
+        self.parking_line_result = None
+        self.lane_detection_enabled = self._env_bool("LANE_DETECTION_ENABLED", True)
+        self.lane_detection_interval = float(os.getenv("LANE_DETECTION_INTERVAL", "0.1"))
+        self.parking_line_log_interval = float(os.getenv("PARKING_LINE_LOG_INTERVAL", "0.5"))
+        self.parking_line_log_enabled = self._env_bool("PARKING_LINE_LOG_ENABLED", False)
+        self.last_lane_detection = 0
+        self.last_parking_line_log_at = 0
+        self.parking_line_detector = ParkingLineDetector() if ParkingLineDetector else None
+
+        try:
+            if self._source_disabled(source):
+                self.camera = None
+                print("Camera disabled by CAMERA_SOURCE.", flush=True)
+            elif source == "pi":
+                self._init_pi_camera()
+            else:
+                self._init_opencv_camera()
+        except Exception as exc:
+            print(f"Camera init failed: {exc}", flush=True)
+            self.camera = None
+
+    @staticmethod
+    def _env_bool(name, default=False):
+        value = os.getenv(name)
+        if value is None:
+            return default
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _source_disabled(source):
+        return str(source).strip().lower() in {"-1", "none", "disabled", "off", "false"}
+
+    def _init_pi_camera(self):
+        try:
+            from picamera import PiCamera
+        except ImportError:
+            print("picamera is not installed.", flush=True)
+            self.camera = None
+            return
+
+        self.camera = PiCamera()
+        self.camera.resolution = self.resolution
+        self.camera.framerate = self.fps
+        print(f"Pi camera initialized: {self.resolution} @ {self.fps}fps", flush=True)
+
+    def _init_opencv_camera(self):
+        if cv2 is None:
+            raise RuntimeError("OpenCV is not available")
+
+        self.camera = self._open_video_capture()
+        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
+        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
+        self.camera.set(cv2.CAP_PROP_FPS, self.fps)
+        try:
+            self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
+
+        print(f"OpenCV camera initialized: {self.resolution} @ {self.fps}fps", flush=True)
+
+    def _open_video_capture(self):
+        backend = os.getenv("CAMERA_BACKEND", "").strip().upper()
+        backend_map = {
+            "ANY": cv2.CAP_ANY,
+            "MSMF": cv2.CAP_MSMF,
+            "DSHOW": cv2.CAP_DSHOW,
+        }
+        if backend in backend_map:
+            return cv2.VideoCapture(self.source, backend_map[backend])
+        return cv2.VideoCapture(self.source)
+
+    def start(self):
+        if self.camera is None:
+            print("Camera is not initialized.", flush=True)
+            return False
+
+        self.is_running = True
+        threading.Thread(target=self._capture_frames, daemon=True).start()
+        return True
+
+    def stop(self):
+        self.is_running = False
+        if self.camera:
+            if hasattr(self.camera, "close"):
+                self.camera.close()
+            else:
+                self.camera.release()
+
+    def _capture_frames(self):
+        while self.is_running:
+            try:
+                if hasattr(self.camera, "capture"):
+                    stream = BytesIO()
+                    self.camera.capture(stream, format="jpeg")
+                    stream.seek(0)
+                    jpeg_bytes = stream.getvalue()
+                    self._update_lane_angle_from_jpeg(jpeg_bytes)
+                    with self.lock:
+                        self.frame = jpeg_bytes
+                else:
+                    ret, frame = self.camera.read()
+                    if ret:
+                        self._update_lane_angle(frame)
+                        encode_param = [
+                            int(cv2.IMWRITE_JPEG_QUALITY),
+                            getattr(self, "jpeg_quality", 80),
+                        ]
+                        _, jpeg = cv2.imencode(".jpg", frame, encode_param)
+                        with self.lock:
+                            self.frame = jpeg.tobytes()
+
+                time.sleep(1.0 / self.fps)
+            except Exception as exc:
+                print(f"Frame capture failed: {exc}", flush=True)
+                time.sleep(0.1)
+
+    def get_frame(self):
+        with self.lock:
+            return self.frame
+
+    def get_lane_angle(self):
+        with self.lock:
+            return self.lane_angle
+
+    def get_lane_angle_updated_at(self):
+        with self.lock:
+            return self.lane_angle_updated_at
+
+    def get_parking_line_result(self):
+        with self.lock:
+            return self.parking_line_result.copy() if self.parking_line_result else None
+
+    def get_mjpeg_frame(self):
+        frame = self.get_frame()
+        if frame is None:
+            return self._get_placeholder_frame()
+        return frame
+
+    def get_debug_mjpeg_frame(self):
+        frame = self.get_frame()
+        if frame is None:
+            return self._get_placeholder_frame("Camera Not Available")
+        return self._draw_parking_line_overlay(frame)
+
+    def _get_placeholder_frame(self, message="Camera Not Available"):
+        if cv2 is None or np is None:
+            return None
+
+        img = np.zeros((self.resolution[1], self.resolution[0], 3), dtype=np.uint8)
+        cv2.putText(
+            img,
+            message,
+            (50, 100),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 255, 255),
+            2,
+        )
+        _, jpeg = cv2.imencode(".jpg", img)
+        return jpeg.tobytes()
+
+    def _draw_parking_line_overlay(self, jpeg_bytes):
+        if cv2 is None or np is None:
+            return jpeg_bytes
+
+        frame_array = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
+        if frame is None:
+            return jpeg_bytes
+
+        result = self.get_parking_line_result()
+        height, width = frame.shape[:2]
+        cv2.line(frame, (width // 2, 0), (width // 2, height), (255, 180, 0), 1)
+        cv2.line(frame, (0, height // 2), (width, height // 2), (255, 180, 0), 1)
+
+        if result and result.get("detected"):
+            line = result.get("reference_line")
+            angle = result.get("y_axis_angle_deg")
+            if line:
+                x1, y1, x2, y2 = [int(value) for value in line]
+                cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 255), 6)
+                cv2.circle(frame, (x1, y1), 7, (0, 255, 0), -1)
+                cv2.circle(frame, (x2, y2), 7, (0, 0, 255), -1)
+                dx = x2 - x1
+                dy = y2 - y1
+                length = max(math.hypot(dx, dy), 1.0)
+                normal_x = -dy / length
+                normal_y = dx / length
+                center_x = int(round((x1 + x2) / 2))
+                center_y = int(round((y1 + y2) / 2))
+                arrow_length = int(max(70, min(width, height) * 0.18))
+                end_x = int(round(center_x + normal_x * arrow_length))
+                end_y = int(round(center_y + normal_y * arrow_length))
+                cv2.arrowedLine(
+                    frame,
+                    (center_x, center_y),
+                    (end_x, end_y),
+                    (255, 0, 255),
+                    4,
+                    tipLength=0.22,
+                )
+            label = f"normal-y {angle:+.2f} deg" if angle is not None else "normal-y n/a"
+            color = (0, 255, 255)
+        else:
+            label = "parking line not detected"
+            color = (0, 0, 255)
+
+        cv2.rectangle(frame, (12, 14), (360, 58), (0, 0, 0), -1)
+        cv2.putText(
+            frame,
+            label,
+            (24, 44),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            color,
+            2,
+        )
+
+        _, jpeg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality])
+        return jpeg.tobytes()
+
+    def _update_lane_angle_from_jpeg(self, jpeg_bytes):
+        if cv2 is None or np is None:
+            return
+        frame_array = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
+        self._update_lane_angle(frame)
+
+    def _update_lane_angle(self, frame):
+        if not self.lane_detection_enabled or cv2 is None or np is None or frame is None:
+            return
+
+        now = time.time()
+        if now - self.last_lane_detection < self.lane_detection_interval:
+            return
+
+        self.last_lane_detection = now
+        angle = None
+        result = None
+
+        if self.parking_line_detector is not None:
+            result = self.parking_line_detector.detect(frame)
+            with self.lock:
+                self.parking_line_result = result
+            if result.get("detected") and result.get("y_axis_angle_deg") is not None:
+                angle = int(round(result["y_axis_angle_deg"]))
+
+            if self.parking_line_log_enabled and now - self.last_parking_line_log_at >= self.parking_line_log_interval:
+                print(self.parking_line_detector.format_log_message(result), flush=True)
+                self.last_parking_line_log_at = now
+
+        if angle is None:
+            angle = self._detect_lane_angle(frame)
+        if angle is None:
+            return
+
+        with self.lock:
+            self.lane_angle = max(-180, min(180, int(angle)))
+            self.lane_angle_updated_at = now
+
+    def _detect_lane_angle(self, frame):
+        height, width = frame.shape[:2]
+        if height <= 0 or width <= 0:
+            return None
+
+        roi_top = int(height * 0.55)
+        roi = frame[roi_top:height, :]
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        edges = cv2.Canny(blur, 60, 160)
+
+        lines = cv2.HoughLinesP(
+            edges,
+            1,
+            np.pi / 180,
+            threshold=40,
+            minLineLength=max(30, width // 12),
+            maxLineGap=40,
+        )
+        if lines is None:
+            return None
+
+        weighted_sum = 0.0
+        weight_total = 0.0
+        for line in lines[:, 0]:
+            x1, y1, x2, y2 = [int(value) for value in line]
+            dx = x2 - x1
+            dy = y2 - y1
+            length = math.hypot(dx, dy)
+            if length < 20:
+                continue
+
+            angle_from_horizontal = math.degrees(math.atan2(-dy, dx))
+            abs_angle = abs(angle_from_horizontal)
+            if abs_angle < 15 or abs_angle > 85:
+                continue
+
+            lane_angle = angle_from_horizontal - 90 if angle_from_horizontal > 0 else angle_from_horizontal + 90
+            weighted_sum += lane_angle * length
+            weight_total += length
+
+        if weight_total == 0:
+            return None
+
+        return max(-180, min(180, int(round(weighted_sum / weight_total))))
+
+
+class CameraStreamGenerator:
+    """Generate MJPEG frames for Flask streaming."""
+
+    def __init__(self, camera_manager):
+        self.camera = camera_manager
+
+    def generate(self):
+        while True:
+            frame = self.camera.get_mjpeg_frame()
+            if frame:
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: "
+                    + str(len(frame)).encode()
+                    + b"\r\n\r\n"
+                    + frame
+                    + b"\r\n"
+                )
+            time.sleep(1.0 / self.camera.fps)
+
+    def generate_debug(self):
+        while True:
+            frame = self.camera.get_debug_mjpeg_frame()
+            if frame:
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: "
+                    + str(len(frame)).encode()
+                    + b"\r\n\r\n"
+                    + frame
+                    + b"\r\n"
+                )
+            time.sleep(1.0 / self.camera.fps)
