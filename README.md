@@ -10,40 +10,20 @@ Raspberry Pi와 AURIX TC375 기반 ECU를 CAN/CAN FD로 연결하여,
 <div align="center">
 <table>
   <tr>
-    <td align="center" valign="top">
-      <img src="./docs/team/lee-jaepil.png" width="100" alt="이재필" />
-      <br />
-      <b>이재필</b>
+    <td align="center">
+      <a href="https://github.com/Wangjaepil">
+        <img src="https://github.com/Wangjaepil.png" width="100px;" alt="왕재필" />
+        <br />
+        <b>왕재필</b>
+      </a>
       <br />
       팀장
       <br />
       자동 출차 / IMU
     </td>
-    <td align="center" valign="top">
-      <a href="https://github.com/jaedong1">
-        <img src="./docs/team/kim-jaedong.png" width="100" alt="김재동" />
-        <br />
-        <b>김재동</b>
-      </a>
-      <br />
-      팀원
-      <br />
-      Android App / Bluetooth / IMU
-    </td>
-    <td align="center" valign="top">
-      <a href="https://github.com/Kim-Byunghyun">
-        <img src="./docs/team/kim-byunghyun.png" width="100" alt="김병현" />
-        <br />
-        <b>김병현</b>
-      </a>
-      <br />
-      팀원
-      <br />
-      CAN / 컨트롤러 / Motor ECU
-    </td>
-    <td align="center" valign="top">
+    <td align="center">
       <a href="https://github.com/starryeev">
-        <img src="./docs/team/kim-kunwoo.png" width="100" alt="김건우" />
+        <img src="https://github.com/starryeev.png" width="100px;" alt="김건우" />
         <br />
         <b>김건우</b>
       </a>
@@ -52,18 +32,31 @@ Raspberry Pi와 AURIX TC375 기반 ECU를 CAN/CAN FD로 연결하여,
       <br />
       초음파 센서 / RTOS
     </td>
-    <td align="center" valign="top">
-      <img src="./docs/team/hwang-seonan.png" width="100" alt="황선안" />
-      <br />
-      <b>황선안</b>
+    <td align="center">
+      <a href="https://github.com/Kim-Byunghyun">
+        <img src="https://github.com/Kim-Byunghyun.png" width="100px;" alt="김병현" />
+        <br />
+        <b>김병현</b>
+      </a>
       <br />
       팀원
       <br />
-      Raspberry Pi 통합 / HMI / 주차선 인식
+      CAN / 컨트롤러 / Motor ECU
     </td>
-    <td align="center" valign="top">
+    <td align="center">
+      <a href="https://github.com/jaedong1">
+        <img src="https://github.com/jaedong1.png" width="100px;" alt="김재동" />
+        <br />
+        <b>김재동</b>
+      </a>
+      <br />
+      팀원
+      <br />
+      Android App / Bluetooth / IMU
+    </td>
+    <td align="center">
       <a href="https://github.com/lsoyeon">
-        <img src="./docs/team/lee-soyeon.png" width="100" alt="이소연" />
+        <img src="https://github.com/lsoyeon.png" width="100px;" alt="이소연" />
         <br />
         <b>이소연</b>
       </a>
@@ -270,8 +263,7 @@ pca-park-out-system/
 ├── README.md
 ├── docs/
 │   ├── 주차보조시스템_2조_오버드라이브.pdf
-│   ├── system-architecture.png
-│   └── team/
+│   └── system-architecture.png
 └── src/
     ├── PCA-Android-App/    # Kotlin Android 앱 / Bluetooth SPP
     ├── PCA-HMI/            # Flask HMI / CAN / 카메라 / 주차선 인식
