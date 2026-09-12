@@ -12,9 +12,9 @@ Raspberry Pi와 AURIX TC375 기반 ECU를 CAN/CAN FD로 연결하여,
   <tr>
     <td align="center">
       <a href="https://github.com/Wangjaepil">
-        <img src="https://github.com/Wangjaepil.png" width="100px;" alt="왕재필" />
+        <img src="https://github.com/Wangjaepil.png" width="100px;" alt="이재필" />
         <br />
-        <b>왕재필</b>
+        <b>이재필</b>
       </a>
       <br />
       팀장
